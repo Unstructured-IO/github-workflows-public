@@ -1,0 +1,70 @@
+name: Security
+
+# Socket Basics SAST / secret scanning for PUBLIC repositories.
+#
+# This file lives in the public Unstructured-IO/github-workflows-public repo so
+# that public repositories can consume it (public repos cannot reference
+# reusable/required workflows that live in a private or internal repo). It is
+# intended to be enforced org-wide on public repos via a repository ruleset
+# scoped to `visibility: public`.
+#
+# Posture: informational to start (continue-on-error), so it never blocks a PR.
+# Gating for real findings is governed by the Socket dashboard policy + the
+# native Socket GitHub App, not by this workflow.
+
+on: pull_request
+
+# Default-deny at the top level so any job added to this file in the future
+# must explicitly opt into the token scopes it needs. The scan job below
+# grants itself only `contents: read`.
+permissions: {}
+
+jobs:
+  socket_basics:
+    name: Socket Basics
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: checkout code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Run Socket Basics
+        id: socket
+        # Skip on fork PRs: forked pull requests do not receive repository or
+        # organization secrets (GitHub withholds them to prevent exfiltration),
+        # so PUBLIC_SOCKET_SECURITY_API_KEY would be empty and the scan could
+        # not authenticate. Fork PRs are covered by the native Socket GitHub
+        # App instead (server-side auth, no key in the Actions context). This
+        # keeps the API key on trusted, same-repo events only.
+        if: github.event.pull_request.head.repo.full_name == github.repository
+        uses: SocketDev/socket-basics@6b71cdf3f792e1ba15b0c42133d8a6f29fb1fc4f # v3.0.0
+        continue-on-error: true
+        env:
+          GITHUB_PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          socket_security_api_key: ${{ secrets.PUBLIC_SOCKET_SECURITY_API_KEY }}
+
+      - name: Log Socket Basics failure for audit
+        if: steps.socket.outcome == 'failure'
+        env:
+          REPO: ${{ github.repository }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          ACTOR: ${{ github.actor }}
+          HEAD_REF: ${{ github.head_ref }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}/attempts/${{ github.run_attempt }}
+        run: |
+          # Emits a workflow annotation + structured log line so the failure is
+          # visible in the run summary and ingestible by enterprise audit log
+          # consumers that scrape job logs. Untrusted fields (HEAD_REF,
+          # PR_NUMBER, etc.) are bound via env: and printed with printf %s, so
+          # they are never interpreted by the shell. Job stays green via
+          # continue-on-error on the Socket step above.
+          SHORT_SHA="${HEAD_SHA:0:12}"
+          printf '::warning title=Socket Basics failed::repo=%s pr=%s actor=%s head_ref=%s sha=%s run=%s\n' \
+            "$REPO" "$PR_NUMBER" "$ACTOR" "$HEAD_REF" "$SHORT_SHA" "$RUN_URL"
+          printf 'audit_event=socket_basics_failed repo=%s pr=%s pr_url=%s actor=%s head_ref=%s sha=%s run=%s\n' \
+            "$REPO" "$PR_NUMBER" "$PR_URL" "$ACTOR" "$HEAD_REF" "$SHORT_SHA" "$RUN_URL"
