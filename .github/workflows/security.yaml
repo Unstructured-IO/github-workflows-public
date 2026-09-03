@@ -38,7 +38,7 @@ jobs:
         # App instead (server-side auth, no key in the Actions context). This
         # keeps the API key on trusted, same-repo events only.
         if: github.event.pull_request.head.repo.full_name == github.repository
-        uses: SocketDev/socket-basics@6b71cdf3f792e1ba15b0c42133d8a6f29fb1fc4f # v3.0.0
+        uses: SocketDev/socket-basics@5b615c89d17764ab46de2f2de63122ca2ef6a4be # v3.1.0
         continue-on-error: true
         env:
           GITHUB_PR_NUMBER: ${{ github.event.pull_request.number || github.event.issue.number }}
