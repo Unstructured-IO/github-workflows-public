@@ -1,0 +1,33 @@
+{
+  // Reason: this file is what makes Renovate run on this repo at all — it is
+  // not merely tuning. The org's self-hosted Renovate (Unstructured-IO/infra,
+  // .github/config/renovate/config.js) sets `onboarding: false`, and Renovate's
+  // `requireConfig` default is "required". Together those mean a repository
+  // with no Renovate config is skipped outright, logged as:
+  //
+  //   INFO: Repository is disabled - skipping
+  //   "result": "disabled-no-config"
+  //
+  // That is exactly what this repo was doing until now: Renovate cloned it on
+  // every run and then dropped it on the floor, so the pinned action digests in
+  // .github/workflows/security.yaml never got update PRs. Deleting this file
+  // silently re-disables the repo — it will not fail loudly. Keep it.
+  $schema: "https://docs.renovatebot.com/renovate-schema.json",
+
+  extends: [
+    "config:recommended",
+    // Keep every `uses:` pinned to a full commit SHA with a version comment.
+    // This repo is consumed by public repos org-wide via a required-workflow
+    // ruleset, so an unpinned tag here is a supply-chain foothold everywhere.
+    "helpers:pinGitHubActionDigests",
+  ],
+
+  dependencyDashboard: true,
+  timezone: "America/Los_Angeles",
+
+  // Reason: no `schedule` restriction, deliberately diverging from the internal
+  // github-workflows repo's `schedule:earlyMondays`. That schedule exists there
+  // to batch a large, noisy dependency surface. This repo pins exactly two
+  // actions, so batching buys nothing while adding up to a week of latency to
+  // security-scanner fixes — the very thing this repo exists to distribute.
+}
